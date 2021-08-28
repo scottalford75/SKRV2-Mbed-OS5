@@ -18,7 +18,7 @@ DigitalOut led(PB_4);
 
 int main()
 {
-    pc.printf("SKRV2 is alive");
+    pc.printf("SKRV2 is alive\n\r");
     mot = 1;
 
     while (true) {

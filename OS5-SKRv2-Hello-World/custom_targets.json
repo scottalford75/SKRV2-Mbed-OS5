@@ -25,7 +25,7 @@
             "FLASH",
             "MPU"
         ],
-        "device_name": "STM32F407VG",
+        "device_name": "STM32F407VGTx",
         "bootloader_supported": true
     }
 }
