@@ -937,60 +937,16 @@ void spi_transfer()
 	// send and receive data to and from the Remora PRU concurrently
 
 #ifdef TARGET_LPC
-/*	int i;
+	int i;
 
 	for (i = 0; i < SPIBUFSIZE; i++)
 	{
 		rxData.rxBuffer[i] = bcm2835_spi_transfer(txData.txBuffer[i]);
-	} */
+	}
 #endif
 	
 #ifdef TARGET_STM32
 	bcm2835_spi_transfernb(txData.txBuffer, rxData.rxBuffer, SPIBUFSIZE);
-	/*
-	// This is the same code as bcm2835_spi_transfernb but with a delay after lowering the CS
-	
-	volatile uint32_t* paddr = bcm2835_spi0 + BCM2835_SPI0_CS/4;
-	volatile uint32_t* fifo = bcm2835_spi0 + BCM2835_SPI0_FIFO/4;
-	uint32_t TXCnt=0;
-	uint32_t RXCnt=0;
-
-	// This is Polled transfer as per section 10.6.1
-	// BUG ALERT: what happens if we get interupted in this section, and someone else
-	// accesses a different peripheral? 
-	//
-
-	// Clear TX and RX fifos
-	bcm2835_peri_set_bits(paddr, BCM2835_SPI0_CS_CLEAR, BCM2835_SPI0_CS_CLEAR);
-
-	// Set TA = 1
-	bcm2835_peri_set_bits(paddr, BCM2835_SPI0_CS_TA, BCM2835_SPI0_CS_TA);
-
-	// Delay to allow slave side DMA to be initiated
-	bcm2835_delayMicroseconds(1);
-
-	// Use the FIFO's to reduce the interbyte times 
-	while((TXCnt < SPIBUFSIZE)||(RXCnt < SPIBUFSIZE))
-	{
-		// TX fifo not full, so add some more bytes 
-		while(((bcm2835_peri_read(paddr) & BCM2835_SPI0_CS_TXD))&&(TXCnt < SPIBUFSIZE ))
-		{
-			bcm2835_peri_write_nb(fifo, bcm2835_correct_order(txData.txBuffer[TXCnt]));
-			TXCnt++;
-		}
-		// Rx fifo not empty, so get the next received bytes 
-		while(((bcm2835_peri_read(paddr) & BCM2835_SPI0_CS_RXD))&&( RXCnt < SPIBUFSIZE ))
-		{
-			rxData.rxBuffer[RXCnt] = bcm2835_correct_order(bcm2835_peri_read_nb(fifo));
-			RXCnt++;
-		}
-	}
-	// Wait for DONE to be set 
-	while (!(bcm2835_peri_read_nb(paddr) & BCM2835_SPI0_CS_DONE));
-
-	// Set TA = 0, and also set the barrier 
-	bcm2835_peri_set_bits(paddr, 0, BCM2835_SPI0_CS_TA);
-	*/
 #endif
 
 }
