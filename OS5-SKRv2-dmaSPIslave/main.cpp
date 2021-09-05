@@ -44,8 +44,9 @@ int main()
     txData.header = PRU_DATA;
 
 
-    // initialise SPI slave with DMA
-    spi_init();
+    // initialise SPI slave and DMA
+    initialiseSPI1slave();
+    initialiseDMA();
 
     slaveSelect.rise(&processPacket);
 
