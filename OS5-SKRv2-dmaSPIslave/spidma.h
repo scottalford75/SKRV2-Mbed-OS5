@@ -3,7 +3,10 @@
  
 #include "stm32f4xx_hal_spi.h"
  
-void spi_init();
+void initialiseSPI1slave();
+void initialiseDMA();
+void DMA2_Stream0_IRQHandler();
+void DMA2_Stream3_IRQHandler();
 
 extern SPI_HandleTypeDef hspi1;
  
