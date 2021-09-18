@@ -3,15 +3,18 @@
 
 #include "stm32f4xx_hal.h"
 
-RemoraSPI::RemoraSPI(volatile rxData_t* rxData, volatile txData_t* txData, SPI_TypeDef* spiType, PinName interruptPin) :
-    rxData(rxData),
-    txData(txData),
+RemoraSPI::RemoraSPI(volatile rxData_t* ptrRxData, volatile txData_t* ptrTxData, SPI_TypeDef* spiType, PinName interruptPin) :
+    ptrRxData(ptrRxData),
+    ptrTxData(ptrTxData),
     spiType(spiType),
     slaveSelect(interruptPin)
 {
     this->spiHandle.Instance = this->spiType;
 
     slaveSelect.rise(callback(this, &RemoraSPI::processPacket));
+
+    printf("ptrRxData = %p\n", ptrRxData);
+    ptrRxBuffer = &spiRxBuffer;
 }
 
 
@@ -109,7 +112,7 @@ void RemoraSPI::init()
         this->hdma_memtomem_dma2_stream1.Init.Mode                = DMA_NORMAL;
         this->hdma_memtomem_dma2_stream1.Init.Priority            = DMA_PRIORITY_LOW;
         this->hdma_memtomem_dma2_stream1.Init.FIFOMode            = DMA_FIFOMODE_ENABLE;
-        this->hdma_memtomem_dma2_stream1.Init.FIFOThreshold        = DMA_FIFO_THRESHOLD_FULL;
+        this->hdma_memtomem_dma2_stream1.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
         this->hdma_memtomem_dma2_stream1.Init.MemBurst            = DMA_MBURST_SINGLE;
         this->hdma_memtomem_dma2_stream1.Init.PeriphBurst         = DMA_PBURST_SINGLE;
 
@@ -120,13 +123,12 @@ void RemoraSPI::init()
 
 void RemoraSPI::start()
 {
-    HAL_SPI_TransmitReceive_DMA(&this->spiHandle, (uint8_t*)this->txData->txBuffer, (uint8_t *)this->spiRxBuffer.rxBuffer, SPI_BUFF_SIZE);
+    this->ptrTxData->header = PRU_DATA;
+    HAL_SPI_TransmitReceive_DMA(&this->spiHandle, (uint8_t *)this->ptrTxData->txBuffer, (uint8_t *)this->spiRxBuffer.rxBuffer, SPI_BUFF_SIZE);
 }
 
 void RemoraSPI::processPacket()
 {
-    this->count++;
-
     switch (this->spiRxBuffer.header)
     {
       case PRU_READ:
@@ -139,8 +141,15 @@ void RemoraSPI::processPacket()
         this->SPIdata = true;
         this->rejectCnt = 0;
         // we've got a good WRITE header, move the data to rxData
-        HAL_DMA_Start(&hdma_memtomem_dma2_stream1, (uint32_t)&this->spiRxBuffer.rxBuffer, (uint32_t)&this->rxData->rxBuffer, SPI_BUFF_SIZE);
-        //this->rxData->header = this->spiRxBuffer.header;
+        //HAL_DMA_Start(&hdma_memtomem_dma2_stream1, (uint32_t)&this->spiRxBuffer.rxBuffer, (uint32_t)&this->rxData->rxBuffer, SPI_BUFF_SIZE);
+        //HAL_DMA_Start(&hdma_memtomem_dma2_stream1, (uint32_t)this->ptrRxBuffer, (uint32_t)this->ptrRxData, SPI_BUFF_SIZE);     
+          
+        for (int i = 0; i < SPI_BUFF_SIZE; i++)
+        {
+            //this->ptrRxData->rxBuffer[i] = this->spiRxBuffer.rxBuffer[i];
+            this->ptrRxData->rxBuffer[i] = this->ptrRxBuffer->rxBuffer[i];
+        }
+
         break;
 
       default:
@@ -151,15 +160,8 @@ void RemoraSPI::processPacket()
         }
         // reset SPI somehow
     }
-/*
-    HAL_DMA_Abort(&hdma_spi1_tx); 
-    HAL_DMA_Abort(&hdma_spi1_rx); 
-    __HAL_RCC_SPI1_FORCE_RESET();
-    __HAL_RCC_SPI2_RELEASE_RESET();
-    initialiseSPI1slave();
-    initialiseDMA();
-*/
-    HAL_SPI_TransmitReceive_DMA(&this->spiHandle, (uint8_t*)this->txData->txBuffer, (uint8_t *)this->spiRxBuffer.rxBuffer, SPI_BUFF_SIZE);
+
+    HAL_SPI_TransmitReceive_DMA(&this->spiHandle, (uint8_t *)this->ptrTxData->txBuffer, (uint8_t *)this->spiRxBuffer.rxBuffer, SPI_BUFF_SIZE);
 }
 
 

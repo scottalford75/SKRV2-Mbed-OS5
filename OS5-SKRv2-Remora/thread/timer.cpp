@@ -42,10 +42,22 @@ void pruTimer::startTimer(void)
         __TIM3_CLK_ENABLE();
         TIM_CLK = APB2CLK;
     }
+    else if (this->timer == TIM9)
+    {
+        printf("	power on Timer 9\n\r");
+        __TIM9_CLK_ENABLE();
+        TIM_CLK = APB1CLK;
+    }
     else if (this->timer == TIM10)
     {
         printf("	power on Timer 10\n\r");
         __TIM10_CLK_ENABLE();
+        TIM_CLK = APB1CLK;
+    }
+    else if (this->timer == TIM11)
+    {
+        printf("	power on Timer 11\n\r");
+        __TIM11_CLK_ENABLE();
         TIM_CLK = APB1CLK;
     }
 

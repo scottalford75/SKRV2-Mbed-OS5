@@ -43,8 +43,7 @@ class Pin
 
         inline bool get()
         {
-            //return ((this->port->IDR >> this->pin ) & 1);
-            return false; //remove this
+            return HAL_GPIO_ReadPin(this->GPIOx, this->pin);
         }
 
         inline void set(bool value)

@@ -20,8 +20,9 @@ class Interrupt
 		static void Register(int interruptNumber, Interrupt* intThisPtr);
 
 		// wrapper functions to ISR_Handler()
-		static void TIM3_Wrapper();
+		static void TIM9_Wrapper();
         static void TIM10_Wrapper();
+        static void TIM11_Wrapper();
 
 		virtual void ISR_Handler(void) = 0;
 

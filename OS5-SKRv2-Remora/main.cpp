@@ -24,33 +24,18 @@
 #include "thread/interrupt.h"
 
 #include "modules/module.h"
-#include "modules/debug/debug.h"
 #include "modules/blink/blink.h"
-
-
-
-
-SDIOBlockDevice blockDevice;
-FATFileSystem fileSystem("fs");
-
-
-// Watchdog
-Watchdog& watchdog = Watchdog::get_instance();
-
-// Json configuration file stuff
-FILE *jsonFile;
-string strJson;
-DynamicJsonDocument doc(JSON_BUFF_SIZE);
-
+#include "modules/debug/debug.h"
+#include "modules/digitalPin/digitalPin.h"
+#include "modules/eStop/eStop.h"
+#include "modules/resetPin/resetPin.h"
+#include "modules/stepgen/stepgen.h"
 
 
 
 /***********************************************************************
-*                STRUCTURES AND GLOBAL VARIABLES                       *
+        STRUCTURES AND GLOBAL VARIABLES                       
 ************************************************************************/
-extern DMA_HandleTypeDef hdma_spi1_tx;
-extern DMA_HandleTypeDef hdma_spi1_rx;
-extern DMA_HandleTypeDef hdma_memtomem_dma2_stream1;
 
 // state machine
 enum State {
@@ -63,39 +48,71 @@ enum State {
     ST_WDRESET
 };
 
+uint8_t resetCnt;
+
+// boolean
+static volatile bool PRUreset;
+bool configError = false;
+bool threadsRunning = false;
 
 // unions for RX and TX data
 //volatile rxData_t spiRxBuffer;  // this buffer is used to check for valid data before moveing it to rxData
 volatile rxData_t rxData;
 volatile txData_t txData;
 
-
 // pointers to objects with global scope
 pruThread* baseThread;
 pruThread* servoThread;
+pruThread* commsThread;
 
 // pointers to data
 volatile rxData_t*  ptrRxData = &rxData;
 volatile txData_t*  ptrTxData = &txData;
+volatile int32_t*   ptrTxHeader;  
+volatile bool*      ptrPRUreset;
+volatile int32_t*   ptrJointFreqCmd[JOINTS];
+volatile int32_t*   ptrJointFeedback[JOINTS];
+volatile uint8_t*   ptrJointEnable;
+volatile float*     ptrSetPoint[VARIABLES];
+volatile float*     ptrProcessVariable[VARIABLES];
+volatile uint8_t*   ptrInputs;
+volatile uint8_t*   ptrOutputs;
 
 
+
+/***********************************************************************
+        OBJECTS etc                                           
+************************************************************************/
+
+// SD card access
+SDIOBlockDevice blockDevice;
+FATFileSystem fileSystem("fs");
+
+// SPI slave - RPi is the SPI master
 RemoraSPI spiSlave(ptrRxData, ptrTxData, SPI1, PA_4);
 
-// Initialise the digital pins as outputs for Blinky
-DigitalOut motEnable(PC_13);
-//DigitalOut HE1(PB_4);
+// Watchdog
+Watchdog& watchdog = Watchdog::get_instance();
 
-//InterruptIn slaveSelect(PA_4);
+// Json configuration file stuff
+FILE *jsonFile;
+string strJson;
+DynamicJsonDocument doc(JSON_BUFF_SIZE);
+
+DigitalOut motEnable(PC_13);        // *** REMOVE THIS***
+
+/***********************************************************************
+        INTERRUPT HANDLERS - add NVIC_SetVector etc to setup()
+************************************************************************/
 
 
-
-void TIM3_IRQHandler()
+void TIM9_IRQHandler()
 {
-  if(TIM3->SR & TIM_SR_UIF) // if UIF flag is set
+  if(TIM9->SR & TIM_SR_UIF) // if UIF flag is set
   {
-    TIM3->SR &= ~TIM_SR_UIF; // clear UIF flag
+    TIM9->SR &= ~TIM_SR_UIF; // clear UIF flag
     
-    Interrupt::TIM3_Wrapper();
+    Interrupt::TIM9_Wrapper();
   }
 }
 
@@ -109,6 +126,20 @@ void TIM10_IRQHandler()
   }
 }
 
+void TIM11_IRQHandler()
+{
+  if(TIM11->SR & TIM_SR_UIF) // if UIF flag is set
+  {
+    TIM11->SR &= ~TIM_SR_UIF; // clear UIF flag
+    
+    Interrupt::TIM11_Wrapper();
+  }
+}
+
+
+/***********************************************************************
+        ROUTINES
+************************************************************************/
 
 void readJsonConfig()
 {
@@ -153,16 +184,263 @@ void readJsonConfig()
 }
 
 
+void setup()
+{
+    printf("\n2. Setting up SPI, DMA and threads\n");
+
+    // deinitialise the SDIO device to avoid DMA issues with the SPI DMA Slave on the STM32F
+    blockDevice.deinit();
+
+    // initialise the SPI DMA Slave
+    spiSlave.init();
+    spiSlave.start();
+
+    // Create the thread objects and set the interrupt vectors to RAM. This is needed
+    // as we are using the SD bootloader that requires a different code starting
+    // address. Also set interrupt priority with NVIC_SetPriority.
+
+    baseThread = new pruThread(TIM9, TIM1_BRK_TIM9_IRQn, PRU_BASEFREQ);
+    NVIC_SetVector(TIM1_BRK_TIM9_IRQn, (uint32_t)TIM9_IRQHandler);
+    NVIC_SetPriority(TIM1_BRK_TIM9_IRQn, 2);
+
+    servoThread = new pruThread(TIM10, TIM1_UP_TIM10_IRQn, PRU_SERVOFREQ);
+    NVIC_SetVector(TIM1_UP_TIM10_IRQn, (uint32_t)TIM10_IRQHandler);
+    NVIC_SetPriority(TIM1_UP_TIM10_IRQn, 3);
+
+    commsThread = new pruThread(TIM11, TIM1_TRG_COM_TIM11_IRQn, PRU_COMMSFREQ);
+    NVIC_SetVector(TIM1_TRG_COM_TIM11_IRQn, (uint32_t)TIM11_IRQHandler);
+    NVIC_SetPriority(TIM1_TRG_COM_TIM11_IRQn, 4);
+
+
+    // Other interrupt sources
+
+}
+
+
+void loadModules()
+/*
+{
+    Module* debugOnS = new Debug("PE_5", 1);
+    servoThread->registerModule(debugOnS);
+
+    //Module* blink = new Blink("PB_4", PRU_SERVOFREQ, 1);
+    //servoThread->registerModule(blink);
+
+    ptrPRUreset = &PRUreset;
+    printf("Make Reset Pin at pin PC_4\n");
+    Module* resetPin = new ResetPin(*ptrPRUreset, "PC_4");
+    servoThread->registerModule(resetPin);
+
+    Module* debugOffS = new Debug("PE_5", 0);
+    servoThread->registerModule(debugOffS);
+
+
+
+    Module* debugOnB = new Debug("PE_4", 1);
+    baseThread->registerModule(debugOnB);
+
+    Module* blink = new Blink("PB_4", PRU_BASEFREQ, 1);
+    baseThread->registerModule(blink);
+
+    Module* debugOffB = new Debug("PE_4", 0);
+    baseThread->registerModule(debugOffB);  
+}*/
+
+{
+    printf("\n3. Parsing json configuration file\n");
+
+    const char *json = strJson.c_str();
+
+    // parse the json configuration file
+    DeserializationError error = deserializeJson(doc, json);
+
+    printf("Config deserialisation - ");
+
+    switch (error.code())
+    {
+        case DeserializationError::Ok:
+            printf("Deserialization succeeded\n");
+            break;
+        case DeserializationError::InvalidInput:
+            printf("Invalid input!\n");
+            configError = true;
+            break;
+        case DeserializationError::NoMemory:
+            printf("Not enough memory\n");
+            configError = true;
+            break;
+        default:
+            printf("Deserialization failed\n");
+            configError = true;
+            break;
+    }
+
+    if (configError) return;
+
+    JsonArray Modules = doc["Modules"];
+
+    // create objects from json data
+    for (JsonArray::iterator it=Modules.begin(); it!=Modules.end(); ++it)
+    {
+        JsonObject module = *it;
+        
+        const char* thread = module["Thread"];
+        const char* type = module["Type"];
+
+        if (!strcmp(thread,"Base"))
+        {
+            printf("\nBase thread object\n");
+
+            if (!strcmp(type,"Stepgen"))
+            {
+                const char* comment = module["Comment"];
+                printf("%s\n",comment);
+
+                int joint = module["Joint Number"];
+                const char* enable = module["Enable Pin"];
+                const char* step = module["Step Pin"];
+                const char* dir = module["Direction Pin"];
+
+                // configure pointers to data source and feedback location
+                ptrJointFreqCmd[joint] = &rxData.jointFreqCmd[joint];
+                ptrJointFeedback[joint] = &txData.jointFeedback[joint];
+                ptrJointEnable = &rxData.jointEnable;
+
+                // create the step generator, register it in the thread
+                Module* stepgen = new Stepgen(PRU_BASEFREQ, joint, enable, step, dir, STEPBIT, *ptrJointFreqCmd[joint], *ptrJointFeedback[joint], *ptrJointEnable);
+                baseThread->registerModule(stepgen);
+            }
+
+        }
+                else if (!strcmp(thread,"Servo"))
+        {
+            printf("\nServo thread object\n");
+
+            if (!strcmp(type, "eStop"))
+            {
+                const char* comment = module["Comment"];
+                printf("%s\n",comment);
+    
+                const char* pin = module["Pin"];
+            
+                ptrTxHeader = &txData.header;
+    
+                printf("Make eStop at pin %s\n", pin);
+
+                Module* estop = new eStop(*ptrTxHeader, pin);
+                servoThread->registerModule(estop);
+
+            }
+            else if (!strcmp(type, "Reset Pin"))
+            {
+                const char* comment = module["Comment"];
+                printf("%s\n",comment);
+    
+                const char* pin = module["Pin"];
+            
+                ptrPRUreset = &PRUreset;
+    
+                printf("Make Reset Pin at pin %s\n", pin);
+
+                Module* resetPin = new ResetPin(*ptrPRUreset, pin);
+                servoThread->registerModule(resetPin);
+
+            }
+            else if (!strcmp(type, "Blink"))
+            {
+                const char* pin = module["Pin"];
+                int frequency = module["Frequency"];
+                
+                printf("Make Blink at pin %s\n", pin);
+                    
+                Module* blink = new Blink(pin, PRU_SERVOFREQ, frequency);
+                servoThread->registerModule(blink);
+            }
+            else if (!strcmp(type,"Digital Pin"))
+            {
+                const char* comment = module["Comment"];
+                printf("%s\n",comment);
+    
+                const char* pin = module["Pin"];
+                const char* mode = module["Mode"];
+                const char* invert = module["Invert"];
+                const char* modifier = module["Modifier"];
+                int dataBit = module["Data Bit"];
+
+                int mod;
+                bool inv;
+
+                if (!strcmp(modifier,"Open Drain"))
+                {
+                    mod = OPENDRAIN;
+                }
+                else if (!strcmp(modifier,"Pull Up"))
+                {
+                    mod = PULLUP;
+                }
+                else if (!strcmp(modifier,"Pull Down"))
+                {
+                    mod = PULLDOWN;
+                }
+                else if (!strcmp(modifier,"Pull None"))
+                {
+                    mod = PULLNONE;
+                }
+                else
+                {
+                    mod = NONE;
+                }
+
+                if (!strcmp(invert,"True"))
+                {
+                    inv = true;
+                }
+                else inv = false;
+
+                ptrOutputs = &rxData.outputs;
+                ptrInputs = &txData.inputs;
+    
+                printf("Make Digital %s at pin %s\n", mode, pin);
+    
+                if (!strcmp(mode,"Output"))
+                {
+                    //Module* digitalPin = new DigitalPin(*ptrOutputs, 1, pin, dataBit, invert);
+                    Module* digitalPin = new DigitalPin(*ptrOutputs, 1, pin, dataBit, inv, mod);
+                    servoThread->registerModule(digitalPin);
+                }
+                else if (!strcmp(mode,"Input"))
+                {
+                    //Module* digitalPin = new DigitalPin(*ptrInputs, 0, pin, dataBit, invert);
+                    Module* digitalPin = new DigitalPin(*ptrInputs, 0, pin, dataBit, inv, mod);
+                    servoThread->registerModule(digitalPin);
+                }
+                else
+                {
+                    printf("Error - incorrectly defined Digital Pin\n");
+                }
+            }
+        }
+    }
+}
+
+
 
 int main() {
     
     enum State currentState;
     enum State prevState;
 
+    spiSlave.setStatus(false);
+    spiSlave.setError(false);
     currentState = ST_SETUP;
     prevState = ST_RESET;
 
     printf("\nRemora PRU - Programmable Realtime Unit\n");
+
+    motEnable = 1; // *** REMOVE THIS***
+    printf("rxData address = %p\n", &rxData);
+    printf("ptrRxData = %p\n", ptrRxData);
+
 
     watchdog.start(2000);
 
@@ -180,13 +458,13 @@ int main() {
             // do setup tasks
             if (currentState != prevState)
             {
-                printf("## Entering SETUP state\n");
+                printf("\n## Entering SETUP state\n");
             }
             prevState = currentState;
 
             readJsonConfig();
-            //setup();
-            //loadModules();
+            setup();
+            loadModules();
 
             currentState = ST_START;
             break; 
@@ -240,7 +518,7 @@ int main() {
             if (spiSlave.getError())
             {
                 printf("SPI data error:\n");
-                spiSlave.getError(false);
+                spiSlave.setError(false);
             }
 
             //wait for SPI data before changing to running state
@@ -268,7 +546,7 @@ int main() {
             if (spiSlave.getError())
             {
                 printf("SPI data error:\n");
-                spiSlave.getError(false);
+                spiSlave.setError(false);
             }
             
             if (spiSlave.getStatus())

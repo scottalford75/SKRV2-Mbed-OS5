@@ -74,7 +74,7 @@ void Pin::configPin()
     GPIO_TypeDef* gpios[9] ={GPIOA,GPIOB,GPIOC,GPIOD,GPIOE,GPIOF,GPIOG,GPIOH,GPIOI};
     
 
-    if (this->portAndPin[0] == 'P') // PX_XX e.g.PA_2 PC_15
+    if (this->portAndPin[0] == 'P') // PXXX e.g.PA2 PC15
     {  
         this->portIndex     = this->portAndPin[1] - 'A';
         this->pinNumber     = this->portAndPin[3] - '0';       

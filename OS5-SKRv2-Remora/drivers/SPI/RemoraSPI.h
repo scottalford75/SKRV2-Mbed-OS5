@@ -19,9 +19,10 @@ class RemoraSPI
         DMA_HandleTypeDef   hdma_spi_rx;
         DMA_HandleTypeDef   hdma_memtomem_dma2_stream1;
 
-        volatile rxData_t*  rxData;
-        volatile txData_t*  txData;
+        volatile rxData_t*  ptrRxData;
+        volatile txData_t*  ptrTxData;
         rxData_t            spiRxBuffer;
+        rxData_t*           ptrRxBuffer;
         uint8_t             rejectCnt;
         bool                SPIdata;
         bool                SPIdataError;
