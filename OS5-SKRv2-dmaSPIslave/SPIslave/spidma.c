@@ -2,9 +2,13 @@
 #include "mbed.h"
 #include "stm32f4xx_hal.h"
 
+//#include "configuration.h"
+//#include "remora.h"
+
 SPI_HandleTypeDef hspi1;
 DMA_HandleTypeDef hdma_spi1_tx;
 DMA_HandleTypeDef hdma_spi1_rx;
+DMA_HandleTypeDef hdma_memtomem_dma2_stream1;
 
 
 void DMA2_Stream0_IRQHandler(void)
@@ -98,7 +102,22 @@ void initialiseDMA(void)
     HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
     NVIC_SetVector(DMA2_Stream0_IRQn, (uint32_t)&DMA2_Stream0_IRQHandler);
     HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+
+    
+    hdma_memtomem_dma2_stream1.Instance                 = DMA2_Stream1;
+    hdma_memtomem_dma2_stream1.Init.Channel             = DMA_CHANNEL_0;
+    hdma_memtomem_dma2_stream1.Init.Direction           = DMA_MEMORY_TO_MEMORY;
+    hdma_memtomem_dma2_stream1.Init.PeriphInc           = DMA_PINC_ENABLE;
+    hdma_memtomem_dma2_stream1.Init.MemInc              = DMA_MINC_ENABLE;
+    hdma_memtomem_dma2_stream1.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+    hdma_memtomem_dma2_stream1.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
+    hdma_memtomem_dma2_stream1.Init.Mode                = DMA_NORMAL;
+    hdma_memtomem_dma2_stream1.Init.Priority            = DMA_PRIORITY_LOW;
+    hdma_memtomem_dma2_stream1.Init.FIFOMode            = DMA_FIFOMODE_ENABLE;
+    hdma_memtomem_dma2_stream1.Init.FIFOThreshold        = DMA_FIFO_THRESHOLD_FULL;
+    hdma_memtomem_dma2_stream1.Init.MemBurst            = DMA_MBURST_SINGLE;
+    hdma_memtomem_dma2_stream1.Init.PeriphBurst         = DMA_PBURST_SINGLE;
+
+    HAL_DMA_Init(&hdma_memtomem_dma2_stream1);
 }
-
-
 
