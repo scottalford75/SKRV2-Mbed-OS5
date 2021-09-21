@@ -12,9 +12,6 @@ RemoraSPI::RemoraSPI(volatile rxData_t* ptrRxData, volatile txData_t* ptrTxData,
     this->spiHandle.Instance = this->spiType;
 
     slaveSelect.rise(callback(this, &RemoraSPI::processPacket));
-
-    printf("ptrRxData = %p\n", ptrRxData);
-    ptrRxBuffer = &spiRxBuffer;
 }
 
 
@@ -77,7 +74,7 @@ void RemoraSPI::init()
 
         __HAL_LINKDMA(&this->spiHandle, hdmatx, this->hdma_spi_tx);
 
-        HAL_NVIC_SetPriority(DMA2_Stream3_IRQn, 0, 0);
+        //HAL_NVIC_SetPriority(DMA2_Stream3_IRQn, 0, 0);
         ///NVIC_SetVector(DMA2_Stream3_IRQn, (uint32_t)&DMA2_Stream3_IRQHandler);
         //HAL_NVIC_EnableIRQ(DMA2_Stream3_IRQn);
 
@@ -97,7 +94,7 @@ void RemoraSPI::init()
 
         __HAL_LINKDMA(&this->spiHandle,hdmarx,this->hdma_spi_rx);
 
-        HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
+        //HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
         //NVIC_SetVector(DMA2_Stream0_IRQn, (uint32_t)&DMA2_Stream0_IRQHandler);
         //HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
 
@@ -141,13 +138,15 @@ void RemoraSPI::processPacket()
         this->SPIdata = true;
         this->rejectCnt = 0;
         // we've got a good WRITE header, move the data to rxData
-        //HAL_DMA_Start(&hdma_memtomem_dma2_stream1, (uint32_t)&this->spiRxBuffer.rxBuffer, (uint32_t)&this->rxData->rxBuffer, SPI_BUFF_SIZE);
-        //HAL_DMA_Start(&hdma_memtomem_dma2_stream1, (uint32_t)this->ptrRxBuffer, (uint32_t)this->ptrRxData, SPI_BUFF_SIZE);     
-          
+
+        // **** would like to use DMA for this but cannot when the stream is in CIRCULAR mode for the SPI transfer ****
+        // TODO: figure out how to use NORMAL mode for SPI...
+        //this->status = HAL_DMA_Start(&hdma_memtomem_dma2_stream1, (uint32_t)&this->spiRxBuffer.rxBuffer, (uint32_t)this->rxData->rxBuffer, SPI_BUFF_SIZE);
+        //if (this->status != HAL_OK) printf("F\n");
+
         for (int i = 0; i < SPI_BUFF_SIZE; i++)
         {
-            //this->ptrRxData->rxBuffer[i] = this->spiRxBuffer.rxBuffer[i];
-            this->ptrRxData->rxBuffer[i] = this->ptrRxBuffer->rxBuffer[i];
+            this->ptrRxData->rxBuffer[i] = this->spiRxBuffer.rxBuffer[i];
         }
 
         break;

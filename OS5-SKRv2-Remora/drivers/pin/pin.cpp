@@ -68,8 +68,6 @@ void Pin::configPin()
 {
     printf("Creating Pin @\n");
 
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-
     //x can be (A..I) to select the GPIO peripheral for STM32F40XX and STM32F427X devices.
     GPIO_TypeDef* gpios[9] ={GPIOA,GPIOB,GPIOC,GPIOD,GPIOE,GPIOF,GPIOG,GPIOH,GPIOI};
     
@@ -140,17 +138,41 @@ void Pin::configPin()
             break;
     }
 
+    this->initPin();
+}
+
+
+void Pin::initPin()
+{
     // Configure GPIO pin Output Level
     HAL_GPIO_WritePin(this->GPIOx, this->pin, GPIO_PIN_RESET);
 
     // Configure the GPIO pin
-    GPIO_InitStruct.Pin = this->pin;
-    GPIO_InitStruct.Mode = this->mode;
-    GPIO_InitStruct.Pull = this->pull;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-    HAL_GPIO_Init(this->GPIOx, &GPIO_InitStruct);       
+    this->GPIO_InitStruct.Pin = this->pin;
+    this->GPIO_InitStruct.Mode = this->mode;
+    this->GPIO_InitStruct.Pull = this->pull;
+    this->GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+    HAL_GPIO_Init(this->GPIOx, &this->GPIO_InitStruct);  
+}
 
+void Pin::setAsOutput()
+{
+    this->mode = GPIO_MODE_OUTPUT_PP;
+    this->pull = GPIO_NOPULL;
+    this->initPin();
 }
 
 
+void Pin::setAsInput()
+{
+    this->mode = GPIO_MODE_INPUT;
+    this->pull = GPIO_NOPULL;
+    this->initPin();
+}
 
+
+void Pin::pull_up()
+{
+    this->pull = GPIO_PULLUP;
+    this->initPin();
+}

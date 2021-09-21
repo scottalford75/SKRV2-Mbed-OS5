@@ -27,9 +27,15 @@
 #include "modules/blink/blink.h"
 #include "modules/debug/debug.h"
 #include "modules/digitalPin/digitalPin.h"
+#include "modules/encoder/encoder.h"
 #include "modules/eStop/eStop.h"
+#include "modules/pwm/pwm.h"
+#include "modules/rcservo/rcservo.h"
 #include "modules/resetPin/resetPin.h"
 #include "modules/stepgen/stepgen.h"
+#include "modules/switch/switch.h"
+#include "modules/temperature/temperature.h"
+#include "modules/tmcStepper/tmcStepper.h"
 
 
 
@@ -310,9 +316,79 @@ void loadModules()
                 Module* stepgen = new Stepgen(PRU_BASEFREQ, joint, enable, step, dir, STEPBIT, *ptrJointFreqCmd[joint], *ptrJointFeedback[joint], *ptrJointEnable);
                 baseThread->registerModule(stepgen);
             }
+            else if (!strcmp(type,"Encoder"))
+            {
+                const char* comment = module["Comment"];
+                printf("%s\n",comment);
+    
+                int pv = module["PV[i]"];
+                const char* pinA = module["ChA Pin"];
+                const char* pinB = module["ChB Pin"];
+                const char* pinI = module["Index Pin"];
+                int dataBit = module["Data Bit"];
+                const char* modifier = module["Modifier"];
+            
+                printf("Creating Quadrature Encoder at pins %s and %s\n", pinA, pinB);
 
+                int mod;
+
+                if (!strcmp(modifier,"Open Drain"))
+                {
+                    mod = OPENDRAIN;
+                }
+                else if (!strcmp(modifier,"Pull Up"))
+                {
+                    mod = PULLUP;
+                }
+                else if (!strcmp(modifier,"Pull Down"))
+                {
+                    mod = PULLDOWN;
+                }
+                else if (!strcmp(modifier,"Pull None"))
+                {
+                    mod = PULLNONE;
+                }
+                else
+                {
+                    mod = NONE;
+                }
+                
+                ptrProcessVariable[pv]  = &txData.processVariable[pv];
+                ptrInputs = &txData.inputs;
+
+                if (pinI == nullptr)
+                {
+                    Module* encoder = new Encoder(*ptrProcessVariable[pv], pinA, pinB, mod);
+                    baseThread->registerModule(encoder);
+                }
+                else
+                {
+                    printf("  Encoder has index at pin %s\n", pinI);
+                    Module* encoder = new Encoder(*ptrProcessVariable[pv], *ptrInputs, dataBit, pinA, pinB, pinI, mod);
+                    baseThread->registerModule(encoder);
+                }
+
+            }
+            else if (!strcmp(type,"RCServo"))
+            {
+                const char* comment = module["Comment"];
+                printf("%s\n",comment);
+    
+                int sp = module["SP[i]"];
+                const char* pin = module["Servo Pin"];
+            
+                printf("Make RC Servo at pin %s\n", pin);
+                
+                ptrSetPoint[sp] = &rxData.setPoint[sp];
+
+                // slow module with 10 hz update
+                int updateHz = 10;
+                Module* rcservo = new RCServo(*ptrSetPoint[sp], pin, PRU_BASEFREQ, updateHz);
+                baseThread->registerModule(rcservo);
+
+            }
         }
-                else if (!strcmp(thread,"Servo"))
+        else if (!strcmp(thread,"Servo"))
         {
             printf("\nServo thread object\n");
 
@@ -419,14 +495,196 @@ void loadModules()
                     printf("Error - incorrectly defined Digital Pin\n");
                 }
             }
+            else if (!strcmp(type,"PWM"))
+            {
+                const char* comment = module["Comment"];
+                printf("%s\n",comment);
+    
+                int sp = module["SP[i]"];
+                int pwmMax = module["PWM Max"];
+                const char* pin = module["PWM Pin"];
+
+                const char* hardware = module["Hardware PWM"];
+                const char* variable = module["Variable Freq"];
+                int period_sp = module["Period SP[i]"];
+                int period = module["Period us"];
+            
+                printf("Make PWM at pin %s\n", pin);
+                
+                ptrSetPoint[sp] = &rxData.setPoint[sp];
+
+                if (!strcmp(hardware,"True"))
+                {
+                    // Hardware PWM
+                    if (!strcmp(variable,"True"))
+                    {
+                        // Variable frequency hardware PWM
+                        ptrSetPoint[period_sp] = &rxData.setPoint[period_sp];
+
+                        //Module* pwm = new HardwarePWM(*ptrSetPoint[period_sp], *ptrSetPoint[sp], period, pin);
+                        //servoThread->registerModule(pwm);
+                    }
+                    else
+                    {
+                        // Fixed frequency hardware PWM
+                        //Module* pwm = new HardwarePWM(*ptrSetPoint[sp], period, pin);
+                        //servoThread->registerModule(pwm);
+                    }
+                }
+                else
+                {
+                    // Software PWM
+                    if (pwmMax != 0) // use configuration file value for pwmMax - useful for 12V on 24V systems
+                    {
+                        Module* pwm = new PWM(*ptrSetPoint[sp], pin, pwmMax);
+                        servoThread->registerModule(pwm);
+                    }
+                    else // use default value of pwmMax
+                    {
+                        Module* pwm = new PWM(*ptrSetPoint[sp], pin);
+                        servoThread->registerModule(pwm);
+                    }
+                }
+            }
+            else if (!strcmp(type,"Temperature"))
+            { 
+                printf("Make Temperature measurement object\n");
+                const char* comment = module["Comment"];
+                printf("%s\n",comment);
+
+                int pv = module["PV[i]"];
+                const char* sensor = module["Sensor"];
+
+                ptrProcessVariable[pv]  = &txData.processVariable[pv];
+
+                if (!strcmp(sensor, "Thermistor"))
+                {
+                    const char* pinSensor = module["Thermistor"]["Pin"];
+                    float beta =  module["Thermistor"]["beta"];
+                    int r0 = module["Thermistor"]["r0"];
+                    int t0 = module["Thermistor"]["t0"];
+
+                    // slow module with 1 hz update
+                    int updateHz = 1;
+                    Module* temperature = new Temperature(*ptrProcessVariable[pv], PRU_SERVOFREQ, updateHz, sensor, pinSensor, beta, r0, t0);
+                    servoThread->registerModule(temperature);
+                }
+            }
+            else if (!strcmp(type,"Switch"))
+            {
+                const char* comment = module["Comment"];
+                printf("%s\n",comment);
+    
+                const char* pin = module["Pin"];
+                const char* mode = module["Mode"];
+                int pv = module["PV[i]"];
+                float sp = module["SP"];
+            
+                printf("Make Switch (%s) at pin %s\n", mode, pin);
+    
+                if (!strcmp(mode,"On"))
+                {
+                    Module* SoftSwitch = new Switch(sp, *ptrProcessVariable[pv], pin, 1);
+                    servoThread->registerModule(SoftSwitch);
+                }
+                else if (!strcmp(mode,"Off"))
+                {
+                    Module* SoftSwitch = new Switch(sp, *ptrProcessVariable[pv], pin, 0);
+                    servoThread->registerModule(SoftSwitch);
+                }
+                else
+                {
+                    printf("Error - incorrectly defined Switch\n");
+                }
+            }
+        }
+        else if (!strcmp(thread,"On load"))
+        {
+            printf("\nOn load - run once module\n");
+
+            if (!strcmp(type,"TMC stepper"))
+            {
+                printf("Make TMC");
+
+                const char* driver = module["Driver"];
+                printf("%s\n", driver);
+
+                const char* comment = module["Comment"];
+                printf("%s\n",comment);
+
+                const char* RxPin = module["RX pin"];
+                float RSense = module["RSense"];
+                uint8_t address = module["Address"];
+                uint16_t current = module["Current"];
+                uint16_t microsteps = module["Microsteps"];
+                const char* stealth = module["Stealth chop"];
+                uint16_t stall = module["Stall sensitivity"];
+
+                bool stealthchop;
+
+                if (!strcmp(stealth, "on"))
+                {
+                    stealthchop = true;
+                }
+                else
+                {
+                    stealthchop = false;   
+                }
+
+                printf("%s\n", driver);
+
+                if (!strcmp(driver, "2208"))
+                {
+                    // SW Serial pin, RSense, mA, microsteps, stealh
+                    // TMC2208(std::string, float, uint8_t, uint16_t, uint16_t, bool);
+                    Module* tmc = new TMC2208(RxPin, RSense, current, microsteps, stealthchop);
+                
+                    printf("\nStarting the COMMS thread\n");
+                    commsThread->startThread();
+                    commsThread->registerModule(tmc);
+                    
+                    tmc->configure();
+
+                    printf("\nStopping the COMMS thread\n");
+                    commsThread->stopThread();
+                    commsThread->unregisterModule(tmc);
+                    delete tmc;
+                }
+                else if (!strcmp(driver, "2209"))
+                {
+                    // SW Serial pin, RSense, addr, mA, microsteps, stealh, stall
+                    // TMC2209(std::string, float, uint8_t, uint16_t, uint16_t, bool, uint16_t);
+                    Module* tmc = new TMC2209(RxPin, RSense, address, current, microsteps, stealthchop, stall);
+                
+                    printf("\nStarting the COMMS thread\n");
+                    commsThread->startThread();
+                    commsThread->registerModule(tmc);
+                    
+                    tmc->configure();
+
+                    printf("\nStopping the COMMS thread\n");
+                    commsThread->stopThread();
+                    commsThread->unregisterModule(tmc);
+                    delete tmc;
+                }
+            }
         }
     }
 }
 
+void debugThread()
+{
+    commsThread->startThread();
 
+    Module* debugOnC = new Debug("PE_4", 1);
+    commsThread->registerModule(debugOnC);
 
-int main() {
-    
+    Module* debugOffC = new Debug("PE_4", 0);
+    commsThread->registerModule(debugOffC); 
+}
+
+int main()
+{    
     enum State currentState;
     enum State prevState;
 
@@ -437,10 +695,7 @@ int main() {
 
     printf("\nRemora PRU - Programmable Realtime Unit\n");
 
-    motEnable = 1; // *** REMOVE THIS***
-    printf("rxData address = %p\n", &rxData);
-    printf("ptrRxData = %p\n", ptrRxData);
-
+    motEnable = 1; // *** REMOVE THIS when motor enable module is implemented***
 
     watchdog.start(2000);
 
@@ -465,6 +720,8 @@ int main() {
             readJsonConfig();
             setup();
             loadModules();
+
+            //debugThread();
 
             currentState = ST_START;
             break; 

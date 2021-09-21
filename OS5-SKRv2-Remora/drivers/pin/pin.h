@@ -33,6 +33,7 @@ class Pin
         uint32_t            pull;
         uint32_t            speed;
         GPIO_TypeDef*       GPIOx;
+        GPIO_InitTypeDef    GPIO_InitStruct = {0};
 
     public:
 
@@ -40,6 +41,10 @@ class Pin
         Pin(std::string, int, int);
 
         void configPin();
+        void initPin();
+        void setAsOutput();
+        void setAsInput();
+        void pull_up();
 
         inline bool get()
         {
