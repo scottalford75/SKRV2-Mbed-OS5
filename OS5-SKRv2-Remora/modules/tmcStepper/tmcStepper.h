@@ -8,6 +8,13 @@
 #include "modules/module.h"
 #include "/TMCStepper/TMCstepper.h"
 
+#include "extern.h"
+
+#include "extern.h"
+
+void createTMC2208(void);
+void createTMC2209(void);
+
 class TMC : public Module
 {
   protected:

@@ -5,6 +5,59 @@
 
 #define TOFF_VALUE  4 // [1... 15]
 
+/***********************************************************************
+                MODULE CONFIGURATION AND CREATION FROM JSON     
+************************************************************************/
+void createTMC2208()
+{
+    printf("Make TMC");
+
+    const char* driver = module["Driver"];
+    printf("%s\n", driver);
+
+    const char* comment = module["Comment"];
+    printf("%s\n",comment);
+
+    const char* RxPin = module["RX pin"];
+    float RSense = module["RSense"];
+    uint8_t address = module["Address"];
+    uint16_t current = module["Current"];
+    uint16_t microsteps = module["Microsteps"];
+    const char* stealth = module["Stealth chop"];
+    uint16_t stall = module["Stall sensitivity"];
+
+    bool stealthchop;
+
+    if (!strcmp(stealth, "on"))
+    {
+        stealthchop = true;
+    }
+    else
+    {
+        stealthchop = false;   
+    }
+
+    // SW Serial pin, RSense, mA, microsteps, stealh
+    // TMC2208(std::string, float, uint8_t, uint16_t, uint16_t, bool);
+    Module* tmc = new TMC2208(RxPin, RSense, current, microsteps, stealthchop);
+
+    printf("\nStarting the COMMS thread\n");
+    commsThread->startThread();
+    commsThread->registerModule(tmc);
+    
+    tmc->configure();
+
+    printf("\nStopping the COMMS thread\n");
+    commsThread->stopThread();
+    commsThread->unregisterModule(tmc);
+    delete tmc;
+}
+
+
+/***********************************************************************
+                METHOD DEFINITIONS
+************************************************************************/
+
     // SW Serial pin, RSense, mA, microsteps, stealh, hybrid
     // TMC2209(std::string, float, uint8_t, uint16_t, uint16_t, bool);
 TMC2208::TMC2208(std::string rxtxPin, float Rsense, uint16_t mA, uint16_t microsteps, bool stealth) :
