@@ -9,7 +9,7 @@
 
 
 
-class RemoraSPI
+class RemoraComms
 {
     private:
 
@@ -33,7 +33,7 @@ class RemoraSPI
 
     public:
 
-        RemoraSPI(volatile rxData_t*, volatile txData_t*, SPI_TypeDef*, PinName);
+        RemoraComms(volatile rxData_t*, volatile txData_t*, SPI_TypeDef*, PinName);
         void init(void);
         void start(void);
         bool getStatus(void);

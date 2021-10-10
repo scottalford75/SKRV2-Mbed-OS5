@@ -18,6 +18,11 @@ void Interrupt::Register(int interruptNumber, Interrupt* intThisPtr)
 	ISRVectorTable[interruptNumber] = intThisPtr;
 }
 
+void Interrupt::TIM3_Wrapper(void)
+{
+	ISRVectorTable[TIM3_IRQn]->ISR_Handler();
+}
+
 void Interrupt::TIM9_Wrapper(void)
 {
 	ISRVectorTable[TIM1_BRK_TIM9_IRQn]->ISR_Handler();

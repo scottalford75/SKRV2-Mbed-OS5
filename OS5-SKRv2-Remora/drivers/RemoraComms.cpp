@@ -1,9 +1,9 @@
 #include "mbed.h"
-#include "RemoraSPI.h"
+#include "RemoraComms.h"
 
 #include "stm32f4xx_hal.h"
 
-RemoraSPI::RemoraSPI(volatile rxData_t* ptrRxData, volatile txData_t* ptrTxData, SPI_TypeDef* spiType, PinName interruptPin) :
+RemoraComms::RemoraComms(volatile rxData_t* ptrRxData, volatile txData_t* ptrTxData, SPI_TypeDef* spiType, PinName interruptPin) :
     ptrRxData(ptrRxData),
     ptrTxData(ptrTxData),
     spiType(spiType),
@@ -11,12 +11,15 @@ RemoraSPI::RemoraSPI(volatile rxData_t* ptrRxData, volatile txData_t* ptrTxData,
 {
     this->spiHandle.Instance = this->spiType;
 
-    slaveSelect.rise(callback(this, &RemoraSPI::processPacket));
+    slaveSelect.rise(callback(this, &RemoraComms::processPacket));
+
+    // Let the threads have higher priority
+    HAL_NVIC_SetPriority(EXTI4_IRQn, 5, 0);
 }
 
 
 
-void RemoraSPI::init()
+void RemoraComms::init()
 {
     if(spiHandle.Instance == SPI1)
     {
@@ -118,13 +121,13 @@ void RemoraSPI::init()
     }
 }
 
-void RemoraSPI::start()
+void RemoraComms::start()
 {
     this->ptrTxData->header = PRU_DATA;
     HAL_SPI_TransmitReceive_DMA(&this->spiHandle, (uint8_t *)this->ptrTxData->txBuffer, (uint8_t *)this->spiRxBuffer.rxBuffer, SPI_BUFF_SIZE);
 }
 
-void RemoraSPI::processPacket()
+void RemoraComms::processPacket()
 {
     switch (this->spiRxBuffer.header)
     {
@@ -144,6 +147,7 @@ void RemoraSPI::processPacket()
         //this->status = HAL_DMA_Start(&hdma_memtomem_dma2_stream1, (uint32_t)&this->spiRxBuffer.rxBuffer, (uint32_t)this->rxData->rxBuffer, SPI_BUFF_SIZE);
         //if (this->status != HAL_OK) printf("F\n");
 
+        // Do it the slower way. This does not seem to impact performance but not great to stay in ISR context for longer.. :-(
         for (int i = 0; i < SPI_BUFF_SIZE; i++)
         {
             this->ptrRxData->rxBuffer[i] = this->spiRxBuffer.rxBuffer[i];
@@ -164,22 +168,22 @@ void RemoraSPI::processPacket()
 }
 
 
-bool RemoraSPI::getStatus(void)
+bool RemoraComms::getStatus(void)
 {
     return this->SPIdata;
 }
 
-void RemoraSPI::setStatus(bool status)
+void RemoraComms::setStatus(bool status)
 {
     this->SPIdata = status;
 }
 
-bool RemoraSPI::getError(void)
+bool RemoraComms::getError(void)
 {
     return this->SPIdataError;
 }
 
-void RemoraSPI::setError(bool error)
+void RemoraComms::setError(bool error)
 {
     this->SPIdataError = error;
 }

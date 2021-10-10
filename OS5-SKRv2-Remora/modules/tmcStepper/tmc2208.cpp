@@ -44,12 +44,13 @@ void createTMC2208()
     printf("\nStarting the COMMS thread\n");
     commsThread->startThread();
     commsThread->registerModule(tmc);
-    
+
     tmc->configure();
 
     printf("\nStopping the COMMS thread\n");
     commsThread->stopThread();
     commsThread->unregisterModule(tmc);
+
     delete tmc;
 }
 

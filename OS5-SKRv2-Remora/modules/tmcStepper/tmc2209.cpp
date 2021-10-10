@@ -40,11 +40,10 @@ void createTMC2209()
     // SW Serial pin, RSense, addr, mA, microsteps, stealh, stall
     // TMC2209(std::string, float, uint8_t, uint16_t, uint16_t, bool, uint16_t);
     Module* tmc = new TMC2209(RxPin, RSense, address, current, microsteps, stealthchop, stall);
+    commsThread->registerModule(tmc);
 
     printf("\nStarting the COMMS thread\n");
-    commsThread->startThread();
-    commsThread->registerModule(tmc);
-    
+    commsThread->startThread(); 
     tmc->configure();
 
     printf("\nStopping the COMMS thread\n");
@@ -61,7 +60,10 @@ void createTMC2209()
     // SW Serial pin, RSense, addr, mA, microsteps, stealh, hybrid, stall
     // TMC2209(std::string, float, uint8_t, uint16_t, uint16_t, bool, uint16_t);
 TMC2209::TMC2209(std::string rxtxPin, float Rsense, uint8_t addr, uint16_t mA, uint16_t microsteps, bool stealth, uint16_t stall) :
-    TMC2208(rxtxPin, Rsense, mA, microsteps, stealth),
+    rxtxPin(rxtxPin),
+    mA(mA),
+    microsteps(microsteps),
+    stealth(stealth),
     addr(addr),
     stall(stall)
 {

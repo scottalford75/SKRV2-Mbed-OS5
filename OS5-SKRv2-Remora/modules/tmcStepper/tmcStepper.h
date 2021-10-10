@@ -21,8 +21,6 @@ class TMC : public Module
 
     float       Rsense;
 
-    //TMC(float RS) : Rsense(RS){};
-
   public:
 
     virtual void update(void) = 0;           // Module default interface
@@ -52,10 +50,14 @@ class TMC2208 : public TMC
 };
 
 
-class TMC2209 : public TMC2208
+class TMC2209 : public TMC
 {
   protected:
 
+    std::string rxtxPin;     // default to half duplex
+    uint16_t    mA;
+    uint16_t    microsteps;
+    bool        stealth;
     uint8_t     addr;
     uint16_t    stall;
 

@@ -7,13 +7,15 @@ TMC2208Stepper::TMC2208Stepper(std::string SWRXpin, std::string SWTXpin, float R
     SWRXpin(SWRXpin),
     SWTXpin(SWRXpin),
     TMCStepper(RS),
-    //RXTX_pin(SW_RX_pin == SW_TX_pin ? SW_RX_pin : 0),
     slave_address(addr)
-    {
-        SoftwareSerial *SWSerialObj = new SoftwareSerial(SWRXpin, SWTXpin);
-        SWSerial = SWSerialObj;
-        defaults();
-    }
+{
+    SWSerial = new SoftwareSerial(SWRXpin, SWTXpin);
+
+    defaults();
+
+    //this->debug1 = new DigitalOut(PE_5);
+    //this->debug2 = new DigitalOut(PE_4);
+}
 
 
 void TMC2208Stepper::beginSerial(uint32_t baudrate) {
@@ -94,7 +96,7 @@ int TMC2208Stepper::available() {
 
 __attribute__((weak))
 void TMC2208Stepper::preWriteCommunication() {
-    
+    //this->debug1->write(1);
 }
 
 
@@ -102,19 +104,19 @@ __attribute__((weak))
 void TMC2208Stepper::preReadCommunication() {
 
 	SWSerial->listen();	
-		
+    //this->debug2->write(1);				
 }
 
 
 __attribute__((weak))
 void TMC2208Stepper::postWriteCommunication() {
-
+    //this->debug1->write(0);
 }
 
 
 __attribute__((weak))
 void TMC2208Stepper::postReadCommunication() {
-
+    //this->debug2->write(0);
 }
 
 

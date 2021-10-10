@@ -1,7 +1,6 @@
 #ifndef SOFTWARESERIAL_H
 #define SOFTWARESERIAL_H
 
-//#include "LPC17xx.h"
 #include "mbed.h"
 #include <cstdint>
 #include <string>
@@ -19,11 +18,6 @@
 class SoftwareSerial
 {
     private:
-
-    //static SoftwareSerial* instance;        // there can only be one
-    //void (*_rit_isr)(void);                 // storage for an appended isr function
-    //void ritisr(void);                      // the default (instance) isr
-    //static void _ritisr(void);              // the actual static isr
 
     std::string     TXportAndPin;
     std::string     RXportAndPin;

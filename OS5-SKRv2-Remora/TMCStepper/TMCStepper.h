@@ -278,6 +278,9 @@ class TMC2208Stepper : public TMCStepper {
         std::string SWTXpin;
         std::string SWRXpin;
 
+        //DigitalOut* debug1;
+        //DigitalOut* debug2;
+
         int available();
         void preWriteCommunication();
         void preReadCommunication();

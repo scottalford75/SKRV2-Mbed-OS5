@@ -9,13 +9,11 @@
 #include "configuration.h"
 #include "remora.h"
 
-#include "spidma.h"
-
 #include "lib/SDIO/SDIOBlockDevice.h"
 #include "lib/ArduinoJson6/ArduinoJson.h"
 
 #include "drivers/pin/pin.h"
-#include "drivers/SPI/RemoraSPI.h"
+#include "drivers/RemoraComms.h"
 
 #include "thread/pruThread.h"
 #include "thread/interrupt.h"
@@ -89,8 +87,8 @@ volatile uint8_t*   ptrOutputs;
 SDIOBlockDevice blockDevice;
 FATFileSystem fileSystem("fs");
 
-// SPI slave - RPi is the SPI master
-RemoraSPI spiSlave(ptrRxData, ptrTxData, SPI1, PA_4);
+// Remora communication protocol
+RemoraComms comms(ptrRxData, ptrTxData, SPI1, PA_4);
 
 // Watchdog
 Watchdog& watchdog = Watchdog::get_instance();
@@ -106,6 +104,16 @@ DigitalOut motEnable(PC_13);        // *** REMOVE THIS***
 /***********************************************************************
         INTERRUPT HANDLERS - add NVIC_SetVector etc to setup()
 ************************************************************************/
+
+void TIM3_IRQHandler()
+{
+  if(TIM3->SR & TIM_SR_UIF) // if UIF flag is set
+  {
+    TIM3->SR &= ~TIM_SR_UIF; // clear UIF flag
+    
+    Interrupt::TIM3_Wrapper();
+  }
+}
 
 
 void TIM9_IRQHandler()
@@ -193,9 +201,9 @@ void setup()
     // deinitialise the SDIO device to avoid DMA issues with the SPI DMA Slave on the STM32F
     blockDevice.deinit();
 
-    // initialise the SPI DMA Slave
-    spiSlave.init();
-    spiSlave.start();
+    // initialise the Remora comms 
+    comms.init();
+    comms.start();
 
     // Create the thread objects and set the interrupt vectors to RAM. This is needed
     // as we are using the SD bootloader that requires a different code starting
@@ -209,9 +217,13 @@ void setup()
     NVIC_SetVector(TIM1_UP_TIM10_IRQn, (uint32_t)TIM10_IRQHandler);
     NVIC_SetPriority(TIM1_UP_TIM10_IRQn, 3);
 
-    commsThread = new pruThread(TIM11, TIM1_TRG_COM_TIM11_IRQn, PRU_COMMSFREQ);
-    NVIC_SetVector(TIM1_TRG_COM_TIM11_IRQn, (uint32_t)TIM11_IRQHandler);
-    NVIC_SetPriority(TIM1_TRG_COM_TIM11_IRQn, 4);
+    //commsThread = new pruThread(TIM11, TIM1_TRG_COM_TIM11_IRQn, PRU_COMMSFREQ);
+    //NVIC_SetVector(TIM1_TRG_COM_TIM11_IRQn, (uint32_t)TIM11_IRQHandler);
+    //NVIC_SetPriority(TIM1_TRG_COM_TIM11_IRQn, 4);
+
+    commsThread = new pruThread(TIM3, TIM3_IRQn, PRU_COMMSFREQ);
+    NVIC_SetVector(TIM3_IRQn, (uint32_t)TIM3_IRQHandler);
+    NVIC_SetPriority(TIM3_IRQn, 0);
 
 
     // Other interrupt sources
@@ -220,34 +232,6 @@ void setup()
 
 
 void loadModules()
-/*
-{
-    Module* debugOnS = new Debug("PE_5", 1);
-    servoThread->registerModule(debugOnS);
-
-    //Module* blink = new Blink("PB_4", PRU_SERVOFREQ, 1);
-    //servoThread->registerModule(blink);
-
-    ptrPRUreset = &PRUreset;
-    printf("Make Reset Pin at pin PC_4\n");
-    Module* resetPin = new ResetPin(*ptrPRUreset, "PC_4");
-    servoThread->registerModule(resetPin);
-
-    Module* debugOffS = new Debug("PE_5", 0);
-    servoThread->registerModule(debugOffS);
-
-
-
-    Module* debugOnB = new Debug("PE_4", 1);
-    baseThread->registerModule(debugOnB);
-
-    Module* blink = new Blink("PB_4", PRU_BASEFREQ, 1);
-    baseThread->registerModule(blink);
-
-    Module* debugOffB = new Debug("PE_4", 0);
-    baseThread->registerModule(debugOffB);  
-}*/
-
 {
     printf("\n3. Parsing json configuration file\n");
 
@@ -349,30 +333,45 @@ void loadModules()
             }
             else if (!strcmp(type,"TMC2209 stepper"))
             {
-                createTMC2208();
+                createTMC2209();
             }
         }
     }
 }
 
-void debugThread()
+void debugThreadHigh()
 {
-    commsThread->startThread();
+    Module* debugOnS = new Debug("PE_5", 1);
+    servoThread->registerModule(debugOnS);
 
-    Module* debugOnC = new Debug("PE_4", 1);
+    Module* debugOnB = new Debug("PE_4", 1);
+    baseThread->registerModule(debugOnB);
+
+    Module* debugOnC = new Debug("PE_6", 1);
     commsThread->registerModule(debugOnC);
+}
 
-    Module* debugOffC = new Debug("PE_4", 0);
+void debugThreadLow()
+{
+    Module* debugOffB = new Debug("PE_4", 0);
+    baseThread->registerModule(debugOffB); 
+
+    Module* debugOffS = new Debug("PE_5", 0);
+    servoThread->registerModule(debugOffS);
+
+    commsThread->startThread();
+    Module* debugOffC = new Debug("PE_6", 0);
     commsThread->registerModule(debugOffC); 
 }
+
 
 int main()
 {    
     enum State currentState;
     enum State prevState;
 
-    spiSlave.setStatus(false);
-    spiSlave.setError(false);
+    comms.setStatus(false);
+    comms.setError(false);
     currentState = ST_SETUP;
     prevState = ST_RESET;
 
@@ -402,9 +401,10 @@ int main()
 
             readJsonConfig();
             setup();
-            loadModules();
 
-            //debugThread();
+            //debugThreadHigh();
+            loadModules();
+            //debugThreadLow();
 
             currentState = ST_START;
             break; 
@@ -455,14 +455,14 @@ int main()
             prevState = currentState;
 
             // check to see if there there has been SPI errors
-            if (spiSlave.getError())
+            if (comms.getError())
             {
-                printf("SPI data error:\n");
-                spiSlave.setError(false);
+                printf("Comms data error:\n");
+                comms.setError(false);
             }
 
             //wait for SPI data before changing to running state
-            if (spiSlave.getStatus())
+            if (comms.getStatus())
             {
                 currentState = ST_RUNNING;
             }
@@ -483,17 +483,17 @@ int main()
             prevState = currentState;
 
             // check to see if there there has been SPI errors 
-            if (spiSlave.getError())
+            if (comms.getError())
             {
-                printf("SPI data error:\n");
-                spiSlave.setError(false);
+                printf("Comms data error:\n");
+                comms.setError(false);
             }
             
-            if (spiSlave.getStatus())
+            if (comms.getStatus())
             {
                 // SPI data received by DMA
                 resetCnt = 0;
-                spiSlave.setStatus(false);
+                comms.setStatus(false);
             }
             else
             {
@@ -504,7 +504,7 @@ int main()
             if (resetCnt > SPI_ERR_MAX)
             {
                 // reset threshold reached, reset the PRU
-                printf("   SPI data error limit reached, resetting\n");
+                printf("   Comms data error limit reached, resetting\n");
                 resetCnt = 0;
                 currentState = ST_RESET;
             }

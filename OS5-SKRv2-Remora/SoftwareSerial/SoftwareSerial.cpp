@@ -3,7 +3,6 @@
 #include <cstdint>
 
 
-
 SoftwareSerial::SoftwareSerial(std::string tx, std::string rx)
 {
     if (!tx.empty()) TXportAndPin = tx;
@@ -56,8 +55,9 @@ void SoftwareSerial::setTX(void)
     // output hihg. Now, it is input with pullup for a short while, which
     // is fine. With inverse logic, either order is fine.
 
-    this->txpin->set(1);
+    this->txpin->set(1);                // works for LPC1768 but not STM32
     this->txpin->setAsOutput();
+    this->txpin->set(1);                // needed for STM32
 }
 
 void SoftwareSerial::setRX(void)
