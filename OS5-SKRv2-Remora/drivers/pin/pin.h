@@ -44,7 +44,10 @@ class Pin
         void initPin();
         void setAsOutput();
         void setAsInput();
+        void pull_none();
         void pull_up();
+        void pull_down();
+        PinName pinToPinName();
 
         inline bool get()
         {

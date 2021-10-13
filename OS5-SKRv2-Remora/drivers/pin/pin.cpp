@@ -83,7 +83,7 @@ void Pin::configPin()
             this->pinNumber = this->pinNumber * 10 + pin2;
         }
 
-        this->pin = 1 << this->pinNumber; // this is equivalent to GPI_PIN_x definition
+        this->pin = 1 << this->pinNumber; // this is equivalent to GPIO_PIN_x definition
     }
     else
     {
@@ -171,8 +171,29 @@ void Pin::setAsInput()
 }
 
 
+void Pin::pull_none()
+{
+    this->pull = GPIO_NOPULL;
+    this->initPin();
+}
+
+
 void Pin::pull_up()
 {
     this->pull = GPIO_PULLUP;
     this->initPin();
+}
+
+
+void Pin::pull_down()
+{
+    this->pull = GPIO_PULLDOWN;
+    this->initPin();
+}
+
+
+PinName Pin::pinToPinName()
+{
+    printf("PinName = 0x%x\n", (this->portIndex << 4) | this->pinNumber);
+    return static_cast<PinName>((this->portIndex << 4) | this->pinNumber);
 }

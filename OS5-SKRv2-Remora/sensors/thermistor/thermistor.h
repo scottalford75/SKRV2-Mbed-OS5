@@ -16,7 +16,7 @@ class Thermistor : public TempSensor
 
 		std::string pin;
 
-		//FastAnalogIn *adc;
+		AnalogIn *adc;
 
 		float temperatureMax, temperatureMin;
 		bool useSteinhartHart;
