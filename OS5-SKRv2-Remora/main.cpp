@@ -24,6 +24,7 @@
 #include "modules/digitalPin/digitalPin.h"
 #include "modules/encoder/encoder.h"
 #include "modules/eStop/eStop.h"
+#include "modules/motorPower/motorPower.h"
 #include "modules/pwm/pwm.h"
 #include "modules/rcservo/rcservo.h"
 #include "modules/resetPin/resetPin.h"
@@ -31,6 +32,7 @@
 #include "modules/switch/switch.h"
 #include "modules/temperature/temperature.h"
 #include "modules/tmcStepper/tmcStepper.h"
+#include "modules/qei/qei.h"
 
 
 /***********************************************************************
@@ -99,7 +101,6 @@ string strJson;
 DynamicJsonDocument doc(JSON_BUFF_SIZE);
 JsonObject module;
 
-DigitalOut motEnable(PC_13);        // *** REMOVE THIS***
 
 /***********************************************************************
         INTERRUPT HANDLERS - add NVIC_SetVector etc to setup()
@@ -322,12 +323,20 @@ void loadModules()
             {
                 createSwitch();
             }
+            else if (!strcmp(type,"QEI"))
+            {
+                createQEI();
+            }
         }
         else if (!strcmp(thread,"On load"))
         {
             printf("\nOn load - run once module\n");
 
-            if (!strcmp(type,"TMC2208 stepper"))
+            if (!strcmp(type,"Motor Power"))
+            {
+                createMotorPower();
+            }
+            else if (!strcmp(type,"TMC2208 stepper"))
             {
                 createTMC2208();
             }
@@ -376,8 +385,6 @@ int main()
     prevState = ST_RESET;
 
     printf("\nRemora PRU - Programmable Realtime Unit\n");
-
-    motEnable = 1; // *** REMOVE THIS when motor enable module is implemented***
 
     watchdog.start(2000);
 

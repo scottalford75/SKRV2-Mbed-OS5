@@ -21,7 +21,7 @@ RemoraComms::RemoraComms(volatile rxData_t* ptrRxData, volatile txData_t* ptrTxD
 
 void RemoraComms::init()
 {
-    if(spiHandle.Instance == SPI1)
+    if(this->spiHandle.Instance == SPI1)
     {
         printf("Initialising SPI1 slave\n");
 
