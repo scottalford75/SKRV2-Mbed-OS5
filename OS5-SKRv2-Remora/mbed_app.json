@@ -14,8 +14,7 @@
             "platform.stdio-baud-rate": 115200,
             "target.stdio_uart_tx": "PA_9",
             "target.stdio_uart_rx": "PA_10",
-            "target.features_add": ["STORAGE"],
-            "target.components_add" : ["SDIO"]
+            "target.features_add": ["STORAGE"]
         }
     }
 }

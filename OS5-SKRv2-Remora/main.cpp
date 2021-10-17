@@ -9,15 +9,24 @@
 #include "configuration.h"
 #include "remora.h"
 
-#include "lib/SDIO/SDIOBlockDevice.h"
-#include "lib/ArduinoJson6/ArduinoJson.h"
+#if defined TARGET_STM32F4
+#include "SDIOBlockDevice.h"
+#endif
 
-#include "drivers/pin/pin.h"
-#include "drivers/RemoraComms.h"
+// libraries
+#include "ArduinoJson.h"
 
-#include "thread/pruThread.h"
-#include "thread/interrupt.h"
+// drivers
+#include "RemoraComms.h"
+#include "pin.h"
 
+// threads
+#include "irqHandlers.h"
+#include "pruThread.h"
+#include "interrupt.h"
+
+
+// modules
 #include "modules/module.h"
 #include "modules/blink/blink.h"
 #include "modules/debug/debug.h"
@@ -32,7 +41,7 @@
 #include "modules/switch/switch.h"
 #include "modules/temperature/temperature.h"
 #include "modules/tmcStepper/tmcStepper.h"
-#include "modules/qei/qei.h"
+#include "qei.h"
 
 
 /***********************************************************************
@@ -86,7 +95,10 @@ volatile uint8_t*   ptrOutputs;
 ************************************************************************/
 
 // SD card access
+#if defined TARGET_STM32F4
 SDIOBlockDevice blockDevice;
+#endif
+
 FATFileSystem fileSystem("fs");
 
 // Remora communication protocol
@@ -106,46 +118,7 @@ JsonObject module;
         INTERRUPT HANDLERS - add NVIC_SetVector etc to setup()
 ************************************************************************/
 
-void TIM3_IRQHandler()
-{
-  if(TIM3->SR & TIM_SR_UIF) // if UIF flag is set
-  {
-    TIM3->SR &= ~TIM_SR_UIF; // clear UIF flag
-    
-    Interrupt::TIM3_Wrapper();
-  }
-}
-
-
-void TIM9_IRQHandler()
-{
-  if(TIM9->SR & TIM_SR_UIF) // if UIF flag is set
-  {
-    TIM9->SR &= ~TIM_SR_UIF; // clear UIF flag
-    
-    Interrupt::TIM9_Wrapper();
-  }
-}
-
-void TIM10_IRQHandler()
-{
-  if(TIM10->SR & TIM_SR_UIF) // if UIF flag is set
-  {
-    TIM10->SR &= ~TIM_SR_UIF; // clear UIF flag
-    
-    Interrupt::TIM10_Wrapper();
-  }
-}
-
-void TIM11_IRQHandler()
-{
-  if(TIM11->SR & TIM_SR_UIF) // if UIF flag is set
-  {
-    TIM11->SR &= ~TIM_SR_UIF; // clear UIF flag
-    
-    Interrupt::TIM11_Wrapper();
-  }
-}
+// Add these to /thread/irqHandlers.h in the TARGET_target
 
 
 /***********************************************************************
@@ -198,9 +171,11 @@ void readJsonConfig()
 void setup()
 {
     printf("\n2. Setting up SPI, DMA and threads\n");
-
+    
+    #if defined TARGET_STM32F4
     // deinitialise the SDIO device to avoid DMA issues with the SPI DMA Slave on the STM32F
     blockDevice.deinit();
+    #endif
 
     // initialise the Remora comms 
     comms.init();
@@ -218,13 +193,13 @@ void setup()
     NVIC_SetVector(TIM1_UP_TIM10_IRQn, (uint32_t)TIM10_IRQHandler);
     NVIC_SetPriority(TIM1_UP_TIM10_IRQn, 3);
 
-    //commsThread = new pruThread(TIM11, TIM1_TRG_COM_TIM11_IRQn, PRU_COMMSFREQ);
-    //NVIC_SetVector(TIM1_TRG_COM_TIM11_IRQn, (uint32_t)TIM11_IRQHandler);
-    //NVIC_SetPriority(TIM1_TRG_COM_TIM11_IRQn, 4);
+    commsThread = new pruThread(TIM11, TIM1_TRG_COM_TIM11_IRQn, PRU_COMMSFREQ);
+    NVIC_SetVector(TIM1_TRG_COM_TIM11_IRQn, (uint32_t)TIM11_IRQHandler);
+    NVIC_SetPriority(TIM1_TRG_COM_TIM11_IRQn, 4);
 
-    commsThread = new pruThread(TIM3, TIM3_IRQn, PRU_COMMSFREQ);
-    NVIC_SetVector(TIM3_IRQn, (uint32_t)TIM3_IRQHandler);
-    NVIC_SetPriority(TIM3_IRQn, 0);
+    //commsThread = new pruThread(TIM3, TIM3_IRQn, PRU_COMMSFREQ);
+    //NVIC_SetVector(TIM3_IRQn, (uint32_t)TIM3_IRQHandler);
+    //NVIC_SetPriority(TIM3_IRQn, 0);
 
 
     // Other interrupt sources
@@ -263,6 +238,8 @@ void loadModules()
     }
 
     if (configError) return;
+
+    printf("\n4. Loading modules\n");
 
     JsonArray Modules = doc["Modules"];
 
